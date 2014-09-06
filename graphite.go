@@ -13,6 +13,7 @@ import (
 
 type Client struct{
   url *httpurl.URL
+  Client *http.Client
 }
 
 func New(url string) (*Client, error) {
@@ -20,11 +21,14 @@ func New(url string) (*Client, error) {
   if err != nil {
     return nil, err
   }
-  return &Client{u}, nil
+  return &Client{
+    url: u,
+    Client: &http.Client{},
+  }, nil
 }
 
 func NewFromURL(url httpurl.URL) *Client {
-  return &Client{&url}
+  return &Client{&url, &http.Client{}}
 }
 
 type TimeInterval struct {
@@ -169,7 +173,7 @@ func (g *Client) Query(q string, interval TimeInterval) Datapoints {
   queryPart.Add("until", graphiteDateFormat(interval.To))
   url.RawQuery = queryPart.Encode()
 
-  resp, err := http.Get(url.String())
+  resp, err := g.Client.Get(url.String())
   if err != nil {
     return Datapoints{err, nil}
   }
