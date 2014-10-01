@@ -23,7 +23,7 @@ func TestParsingFloatGraphiteResult(t *testing.T) {
 
 	// Introspection testing. Should be avoided if possible.
 	if response.err != nil {
-		t.Error("Response should not have had any errors.")
+		t.Fatal("Response should not have had any errors:", response.err)
 	}
 	if l := len(response.points); l != 4 {
 		t.Fatal("Not enough points:", l)
