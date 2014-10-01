@@ -1,7 +1,10 @@
 package infrastructure
 
 import (
+	"fmt"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -11,6 +14,28 @@ func TestGraphiteDateFormat(t *testing.T) {
 	f := graphiteDateFormat(mytime)
 	if f != "09:00_20091110" {
 		t.Error(f)
+	}
+}
+
+func TestIntegration(t *testing.T) {
+	t.Parallel()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, `[{"target": "machine.jvm.gc.PS-MarkSweep.runs", "datapoints": [[185, 1409763000], [741, 1409790300], [null, 1409790600], [756, 1409790900]]}]`)
+	}))
+	defer ts.Close()
+
+	c, err := New(ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	points, err := c.QueryIntsSince("machine.jvm.gc.PS-MarkSweep.runs", time.Second*time.Duration(200))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(points) != 4 {
+		t.Fatal("Missing points:", len(points))
 	}
 }
 

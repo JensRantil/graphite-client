@@ -188,7 +188,7 @@ func (g *Client) Query(q string, interval TimeInterval) Datapoints {
 }
 
 func (g *Client) QuerySince(q string, ago time.Duration) Datapoints {
-	if ago.Nanoseconds() > 0 {
+	if ago.Nanoseconds() <= 0 {
 		return Datapoints{errors.New("Duration is expected to be positive."), nil}
 	}
 
