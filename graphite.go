@@ -227,7 +227,7 @@ func parseGraphiteResponse(body []byte) Datapoints {
 		dps.err = errors.New("Unexpected Graphite response. No targets were matched.")
 	}
 	if len(res) > 1 {
-		dps.err = errors.New("Unexpected Graphite response. More than one target was returned.")
+		dps.err = errors.New("Unexpected Graphite response. More than one target were returned.")
 	}
 	if dps.err != nil {
 		return dps
