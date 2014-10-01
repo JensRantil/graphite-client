@@ -15,6 +15,8 @@ Documentation
 Documentation can be found at
 http://godoc.org/github.com/JensRantil/graphite-client.
 
+A great document summarizing the Graphite API can be found [here](https://github.com/brutasse/graphite-api/blob/master/docs/api.rst).
+
 Example
 -------
 ```
