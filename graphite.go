@@ -27,6 +27,16 @@ func New(url string) (*Client, error) {
 	}, nil
 }
 
+type MultiDatapoints []Datapoints
+
+func (m MultiDatapoints) asMap() map[string]Datapoints {
+	res := make(map[string]Datapoints)
+	for _, point := range m {
+		res[point.Target] = point
+	}
+	return res
+}
+
 func NewFromURL(url httpurl.URL) *Client {
 	return &Client{&url, &http.Client{}}
 }
@@ -58,8 +68,9 @@ type IntDatapoint struct {
 }
 
 type Datapoints struct {
-	// Previous error to make API nicer.
+	// Previous error to make single queries nicer to work with.
 	err    error
+	Target string
 	points [][]interface{}
 }
 
@@ -131,9 +142,11 @@ func (d Datapoints) AsFloats() ([]FloatDatapoint, error) {
 	return points, nil
 }
 
-func constructQueryPart(q string) httpurl.Values {
+func constructQueryPart(qs []string) httpurl.Values {
 	query := make(httpurl.Values)
-	query.Add("target", q)
+	for _, q := range qs {
+		query.Add("target", q)
+	}
 	query.Add("format", "json")
 	return query
 }
@@ -158,11 +171,12 @@ func (g *Client) QueryFloatsSince(q string, ago time.Duration) ([]FloatDatapoint
 	return g.QuerySince(q, ago).AsFloats()
 }
 
-// Fetches a Graphite result. Deferring identifying whether the result are ints
-// of floats to later. Useful in clients that executes adhoc queries.
-func (g *Client) Query(q string, interval TimeInterval) Datapoints {
+// Fetches one or multiple Graphite series. Deferring identifying whether the
+// result are ints of floats to later. Useful in clients that executes adhoc
+// queries.
+func (g *Client) QueryMulti(q []string, interval TimeInterval) (MultiDatapoints, error) {
 	if err := interval.Check(); err != nil {
-		return Datapoints{err, nil}
+		return nil, err
 	}
 
 	// Cloning to be able to modify.
@@ -175,21 +189,24 @@ func (g *Client) Query(q string, interval TimeInterval) Datapoints {
 
 	resp, err := g.Client.Get(url.String())
 	if err != nil {
-		return Datapoints{err, nil}
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return Datapoints{err, nil}
+		return nil, err
 	}
 
 	return parseGraphiteResponse(body)
 }
 
-func (g *Client) QuerySince(q string, ago time.Duration) Datapoints {
+// Fetches one or multiple Graphite series. Deferring identifying whether the
+// result are ints of floats to later. Useful in clients that executes adhoc
+// queries.
+func (g *Client) QueryMultiSince(q []string, ago time.Duration) (MultiDatapoints, error) {
 	if ago.Nanoseconds() <= 0 {
-		return Datapoints{errors.New("Duration is expected to be positive."), nil}
+		return nil, errors.New("Duration is expected to be positive.")
 	}
 
 	// Cloning to be able to modify.
@@ -199,22 +216,95 @@ func (g *Client) QuerySince(q string, ago time.Duration) Datapoints {
 	queryPart.Add("from", fmt.Sprintf("%dminutes", ago.Minutes()))
 	url.RawQuery = queryPart.Encode()
 
-	resp, err := http.Get(url.String())
+	resp, err := g.Client.Get(url.String())
 	if err != nil {
-		return Datapoints{err, nil}
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return Datapoints{err, nil}
+		return nil, err
 	}
 
 	return parseGraphiteResponse(body)
 }
 
-func parseGraphiteResponse(body []byte) Datapoints {
-	var dps Datapoints
+// Fetches a Graphite result only expecting one timeseries. Deferring
+// identifying whether the result are ints of floats to later. Useful in
+// clients that executes adhoc queries.
+func (g *Client) Query(q string, interval TimeInterval) Datapoints {
+	if err := interval.Check(); err != nil {
+		return Datapoints{err, "", nil}
+	}
+
+	// Cloning to be able to modify.
+	url := g.url
+
+	queryPart := constructQueryPart([]string{q})
+	queryPart.Add("from", graphiteDateFormat(interval.From))
+	queryPart.Add("until", graphiteDateFormat(interval.To))
+	url.RawQuery = queryPart.Encode()
+
+	resp, err := g.Client.Get(url.String())
+	if err != nil {
+		return Datapoints{err, "", nil}
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return Datapoints{err, "", nil}
+	}
+
+	points, err := parseGraphiteResponse(body)
+	return parseSingleGraphiteResponse(points, err)
+}
+
+func (g *Client) QuerySince(q string, ago time.Duration) Datapoints {
+	if ago.Nanoseconds() <= 0 {
+		return Datapoints{errors.New("Duration is expected to be positive."), "", nil}
+	}
+
+	// Cloning to be able to modify.
+	url := g.url
+
+	queryPart := constructQueryPart([]string{q})
+	queryPart.Add("from", fmt.Sprintf("%dminutes", ago.Minutes()))
+	url.RawQuery = queryPart.Encode()
+
+	resp, err := http.Get(url.String())
+	if err != nil {
+		return Datapoints{err, "", nil}
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return Datapoints{err, "", nil}
+	}
+
+	points, err := parseGraphiteResponse(body)
+	return parseSingleGraphiteResponse(points, err)
+}
+
+func parseSingleGraphiteResponse(dpss []Datapoints, err error) (dps Datapoints) {
+	if len(dpss) == 0 {
+		dps.err = errors.New("Unexpected Graphite response. No targets were matched.")
+	}
+	if len(dpss) > 1 {
+		dps.err = errors.New("Unexpected Graphite response. More than one target were returned.")
+	}
+	if dps.err != nil {
+		return
+	}
+
+	dps.points = dpss[0].points
+
+	return
+}
+
+func parseGraphiteResponse(body []byte) (MultiDatapoints, error) {
 	var res []target
 
 	decoder := json.NewDecoder(bytes.NewBuffer(body))
@@ -222,19 +312,14 @@ func parseGraphiteResponse(body []byte) Datapoints {
 	// Important to distinguish between ints and floats.
 	decoder.UseNumber()
 
-	dps.err = decoder.Decode(&res)
-	if len(res) == 0 {
-		dps.err = errors.New("Unexpected Graphite response. No targets were matched.")
-	}
-	if len(res) > 1 {
-		dps.err = errors.New("Unexpected Graphite response. More than one target were returned.")
-	}
-	if dps.err != nil {
-		return dps
+	err := decoder.Decode(&res)
+	datapoints := make([]Datapoints, len(res))
+	for i, points := range res {
+		datapoints[i].Target = points.Target
+		datapoints[i].points = points.Datapoints
 	}
 
-	dps.points = res[0].Datapoints
-	return dps
+	return MultiDatapoints(datapoints), err
 }
 
 type queryResult []target

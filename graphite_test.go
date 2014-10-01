@@ -17,6 +17,35 @@ func TestGraphiteDateFormat(t *testing.T) {
 	}
 }
 
+func TestIntegrationMulti(t *testing.T) {
+	t.Parallel()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, `[{"target": "machine.jvm.gc.PS-MarkSweep.runs", "datapoints": [[185, 1409763000], [741, 1409790300], [null, 1409790600]]},{"target": "machine2.jvm.gc.PS-MarkSweep.runs", "datapoints": [[185, 1409763000], [741, 1409790300]]}]`)
+	}))
+	defer ts.Close()
+
+	c, err := New(ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pointlist, err := c.QueryMultiSince([]string{"machine*.jvm.gc.PS-MarkSweep.runs"}, time.Second*time.Duration(200))
+	if err != nil {
+		t.Fatal(err)
+	}
+	points := pointlist.asMap()
+
+	if len(points) != 2 {
+		t.Fatal("Missing points:", len(points))
+	}
+	if ints, _ := points["machine.jvm.gc.PS-MarkSweep.runs"].AsInts(); len(ints) != 3 {
+		t.Error("Expected first points target to have length 3:", len(ints))
+	}
+	if ints, _ := points["machine2.jvm.gc.PS-MarkSweep.runs"].AsInts(); len(ints) != 2 {
+		t.Error("Expected first points target to have length 2:", len(ints))
+	}
+}
+
 func TestIntegration(t *testing.T) {
 	t.Parallel()
 
@@ -44,25 +73,23 @@ func TestParsingFloatGraphiteResult(t *testing.T) {
 
 	s := `[{"target": "machine.jvm.gc.PS-MarkSweep.runs", "datapoints": [[185.0, 1409763000], [741.0, 1409790300], [null, 1409790600], [756.0, 1409790900]]}]`
 
-	response := parseGraphiteResponse([]byte(s))
-
-	// Introspection testing. Should be avoided if possible.
-	if response.err != nil {
-		t.Fatal("Response should not have had any errors:", response.err)
-	}
-	if l := len(response.points); l != 4 {
-		t.Fatal("Not enough points:", l)
+	response, err := parseGraphiteResponse([]byte(s))
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	idps, err := response.AsInts()
+	idps, err := response[0].AsInts()
 	if err == nil {
 		t.Error("Expected an error.")
 	}
 	if idps != nil {
 		t.Error("Expected nil result.")
 	}
+	if len(response) != 1 {
+		t.Error("Unexpected list length:", len(response))
+	}
 
-	fpts, err := parseGraphiteResponse([]byte(s)).AsFloats()
+	fpts, err := response[0].AsFloats()
 	if err != nil {
 		t.Error("Unexpected error.")
 	}
@@ -102,19 +129,25 @@ func TestParsingIntGraphiteResult(t *testing.T) {
 
 	s := `[{"target": "machine.jvm.gc.PS-MarkSweep.runs", "datapoints": [[185, 1409763000], [741, 1409790300], [null, 1409790600], [756, 1409790900]]}]`
 
-	response := parseGraphiteResponse([]byte(s))
+	response, err := parseGraphiteResponse([]byte(s))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response) != 1 {
+		t.Fatal("Unexpected list length:", len(response))
+	}
 
 	// Introspection testing. Should be avoided if possible.
-	if response.err != nil {
+	if response[0].err != nil {
 		t.Error("Response should not have had any errors.")
 	}
-	if l := len(response.points); l != 4 {
+	if l := len(response[0].points); l != 4 {
 		t.Fatal("Not enough points:", l)
 	}
 
 	// Floats are tested in separate test. Just making sure we aren't getting any
 	// suspicious errors.
-	idps, err := response.AsFloats()
+	idps, err := response[0].AsFloats()
 	if err != nil {
 		t.Error("Unexpected error.")
 	}
@@ -122,7 +155,7 @@ func TestParsingIntGraphiteResult(t *testing.T) {
 		t.Error("Unexpected nil result.")
 	}
 
-	fpts, err := parseGraphiteResponse([]byte(s)).AsInts()
+	fpts, err := response[0].AsInts()
 	if err != nil {
 		t.Error("Unexpected error.")
 	}
