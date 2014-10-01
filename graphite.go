@@ -233,8 +233,6 @@ func parseGraphiteResponse(body []byte) Datapoints {
 		return dps
 	}
 
-	// TODO: Check the query is the same as the target name.
-
 	dps.points = res[0].Datapoints
 	return dps
 }
