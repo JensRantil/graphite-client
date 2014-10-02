@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	httpurl "net/url"
+	"path"
 	"time"
 )
 
@@ -16,6 +17,8 @@ type Client struct {
 	Client *http.Client
 }
 
+// Create a new Client from a given URL. The URL is the base adress to
+// Graphite, ie. without "/render" suffix etc.
 func New(url string) (*Client, error) {
 	u, err := httpurl.Parse(url)
 	if err != nil {
@@ -37,6 +40,8 @@ func (m MultiDatapoints) asMap() map[string]Datapoints {
 	return res
 }
 
+// Create a new Client from a given URL. The URL is the base adress to
+// Graphite, ie. without "/render" suffix etc.
 func NewFromURL(url httpurl.URL) *Client {
 	return &Client{&url, &http.Client{}}
 }
@@ -155,6 +160,73 @@ func constructQueryPart(qs []string) httpurl.Values {
 	return query
 }
 
+type FindResultItem struct {
+	Leaf          bool
+	Text          string
+	Id            string
+	Expandable    bool
+	AllowChildren bool
+}
+
+// Used to map isLeaf from integer to
+type rawFindResultItem struct {
+	Leaf          int    `json:"leaf"`
+	Text          string `json:"text"`
+	Id            string `json:"id"`
+	Expandable    int    `json:"expandable"`
+	AllowChildren int    `json:"allowChildren"`
+}
+
+type FindOpts struct {
+	From  *time.Time
+	Until *time.Time
+}
+
+func (g *Client) Find(query string, opts *FindOpts) ([]FindResultItem, error) {
+	// Cloning to be able to modify.
+	url := g.url
+	url.Path = path.Join(url.Path, "/metrics/find")
+
+	queryvalues := make(httpurl.Values)
+	queryvalues.Add("query", query)
+	if opts != nil && opts.From != nil {
+		queryvalues.Add("from", graphiteDateFormat(*opts.From))
+	}
+	if opts != nil && opts.Until != nil {
+		queryvalues.Add("until", graphiteDateFormat(*opts.Until))
+	}
+	url.RawQuery = queryvalues.Encode()
+
+	resp, err := g.Client.Get(url.String())
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var res []rawFindResultItem
+	decoder := json.NewDecoder(bytes.NewBuffer(body))
+	err = decoder.Decode(&res)
+	if err != nil {
+		return nil, err
+	}
+
+	realResult := make([]FindResultItem, len(res))
+	for i, item := range res {
+		realResult[i].Id = item.Id
+		realResult[i].Leaf = item.Leaf > 0
+		realResult[i].Text = item.Text
+		realResult[i].Expandable = item.Expandable > 0
+		realResult[i].AllowChildren = item.AllowChildren > 0
+	}
+
+	return realResult, nil
+}
+
 // Helper method to make it easier to create an interface for Client.
 func (g *Client) QueryInts(q string, interval TimeInterval) ([]IntDatapoint, error) {
 	return g.Query(q, interval).AsInts()
@@ -186,6 +258,8 @@ func (g *Client) QueryMulti(q []string, interval TimeInterval) (MultiDatapoints,
 	// Cloning to be able to modify.
 	url := g.url
 
+	url.Path = path.Join(url.Path, "/render")
+
 	queryPart := constructQueryPart(q)
 	queryPart.Add("from", graphiteDateFormat(interval.From))
 	queryPart.Add("until", graphiteDateFormat(interval.To))
@@ -216,6 +290,8 @@ func (g *Client) QueryMultiSince(q []string, ago time.Duration) (MultiDatapoints
 	// Cloning to be able to modify.
 	url := g.url
 
+	url.Path = path.Join(url.Path, "/render")
+
 	queryPart := constructQueryPart(q)
 	queryPart.Add("from", fmt.Sprintf("%dminutes", ago.Minutes()))
 	url.RawQuery = queryPart.Encode()
@@ -244,6 +320,8 @@ func (g *Client) Query(q string, interval TimeInterval) Datapoints {
 
 	// Cloning to be able to modify.
 	url := g.url
+
+	url.Path = path.Join(url.Path, "/render")
 
 	queryPart := constructQueryPart([]string{q})
 	queryPart.Add("from", graphiteDateFormat(interval.From))
@@ -276,6 +354,8 @@ func (g *Client) QuerySince(q string, ago time.Duration) Datapoints {
 
 	// Cloning to be able to modify.
 	url := g.url
+
+	url.Path = path.Join(url.Path, "/render")
 
 	queryPart := constructQueryPart([]string{q})
 	queryPart.Add("from", graphiteSinceString(ago))

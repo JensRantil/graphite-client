@@ -203,7 +203,7 @@ func makeInt64Pointer(v int64) *int64 {
 	return r
 }
 
-func TestAgainstRealGraphite(t *testing.T) {
+func TestQueryRealGraphite(t *testing.T) {
 	graphiteUrl := os.Getenv("GRAPHITE_URL")
 	if graphiteUrl == "" {
 		t.Skip()
@@ -229,5 +229,25 @@ func TestGraphiteDurationString(t *testing.T) {
 	s := graphiteSinceString(aWeek)
 	if s != "-10080minutes" {
 		t.Error(s)
+	}
+}
+
+func TestFindRealGraphite(t *testing.T) {
+	graphiteUrl := os.Getenv("GRAPHITE_URL")
+	if graphiteUrl == "" {
+		t.Skip()
+	}
+	c, err := New(graphiteUrl)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := c.Find("carbon.*", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(res) <= 0 {
+		t.Error("Expected more results.")
 	}
 }
