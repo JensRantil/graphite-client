@@ -99,7 +99,11 @@ func (d Datapoints) AsInts() ([]IntDatapoint, error) {
 			value = new(int64)
 			*value, err = jsonValue.Int64()
 			if err != nil {
-				return nil, errors.New("Value not proper number.")
+				floatVal, err := jsonValue.Float64()
+				if err != nil {
+					return nil, errors.New("Value not proper number.")
+				}
+				*value = int64(floatVal)
 			}
 		}
 		points = append(points, IntDatapoint{time.Unix(unixTime, 0), value})
