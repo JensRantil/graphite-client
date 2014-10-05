@@ -261,6 +261,10 @@ func (g *Client) Query(q string, interval TimeInterval) Datapoints {
 	return parseSingleGraphiteResponse(points, err)
 }
 
+func graphiteSinceString(duration time.Duration) string {
+	return fmt.Sprintf("%dminutes", -int(duration.Minutes()+0.5))
+}
+
 func (g *Client) QuerySince(q string, ago time.Duration) Datapoints {
 	if ago.Nanoseconds() <= 0 {
 		return Datapoints{errors.New("Duration is expected to be positive."), "", nil}
@@ -270,7 +274,7 @@ func (g *Client) QuerySince(q string, ago time.Duration) Datapoints {
 	url := g.url
 
 	queryPart := constructQueryPart([]string{q})
-	queryPart.Add("from", fmt.Sprintf("%dminutes", ago.Minutes()))
+	queryPart.Add("from", graphiteSinceString(ago))
 	url.RawQuery = queryPart.Encode()
 
 	resp, err := http.Get(url.String())

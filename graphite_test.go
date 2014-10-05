@@ -5,6 +5,7 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 )
@@ -200,4 +201,33 @@ func makeInt64Pointer(v int64) *int64 {
 	r := new(int64)
 	*r = v
 	return r
+}
+
+func TestAgainstRealGraphite(t *testing.T) {
+	graphiteUrl := os.Getenv("GRAPHITE_URL")
+	if graphiteUrl == "" {
+		t.Skip()
+	}
+	c, err := New(graphiteUrl)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	day := 24 * time.Hour
+	aWeek := day * 7
+
+	// Expect this metric to exist on all Graphite instances. Using glob to
+	// ignore speicific Graphite agent name.
+	_, err = c.QueryFloatsSince("sumSeries(carbon.agents.*.avgUpdateTime)", aWeek)
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func TestGraphiteDurationString(t *testing.T) {
+	aWeek := 7 * 24 * time.Hour
+	s := graphiteSinceString(aWeek)
+	if s != "-10080minutes" {
+		t.Error(s)
+	}
 }
