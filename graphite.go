@@ -13,7 +13,7 @@ import (
 )
 
 type Client struct {
-	url    *httpurl.URL
+	url    httpurl.URL
 	Client *http.Client
 }
 
@@ -25,7 +25,7 @@ func New(url string) (*Client, error) {
 		return nil, err
 	}
 	return &Client{
-		url:    u,
+		url:    *u,
 		Client: &http.Client{},
 	}, nil
 }
@@ -43,7 +43,7 @@ func (m MultiDatapoints) asMap() map[string]Datapoints {
 // Create a new Client from a given URL. The URL is the base adress to
 // Graphite, ie. without "/render" suffix etc.
 func NewFromURL(url httpurl.URL) *Client {
-	return &Client{&url, &http.Client{}}
+	return &Client{url, &http.Client{}}
 }
 
 type TimeInterval struct {
