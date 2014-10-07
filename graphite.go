@@ -203,13 +203,8 @@ func (g *Client) Find(query string, opts *FindOpts) ([]FindResultItem, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
 	var res []rawFindResultItem
-	decoder := json.NewDecoder(bytes.NewBuffer(body))
+	decoder := json.NewDecoder(resp.Body)
 	err = decoder.Decode(&res)
 	if err != nil {
 		return nil, err
