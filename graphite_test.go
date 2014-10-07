@@ -80,11 +80,11 @@ func TestParsingFloatGraphiteResult(t *testing.T) {
 	}
 
 	idps, err := response[0].AsInts()
-	if err == nil {
-		t.Error("Expected an error.")
+	if err != nil {
+		t.Error("Unxpected error.")
 	}
-	if idps != nil {
-		t.Error("Expected nil result.")
+	if idps == nil {
+		t.Error("Unxpected nil result.")
 	}
 	if len(response) != 1 {
 		t.Error("Unexpected list length:", len(response))
