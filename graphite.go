@@ -288,7 +288,7 @@ func (g *Client) QueryMultiSince(q []string, ago time.Duration) (MultiDatapoints
 	url.Path = path.Join(url.Path, "/render")
 
 	queryPart := constructQueryPart(q)
-	queryPart.Add("from", fmt.Sprintf("%dminutes", ago.Minutes()))
+	queryPart.Add("from", graphiteSinceString(ago))
 	url.RawQuery = queryPart.Encode()
 
 	resp, err := g.Client.Get(url.String())
