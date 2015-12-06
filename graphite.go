@@ -13,7 +13,7 @@ import (
 )
 
 type Client struct {
-	url    httpurl.URL
+	URL    httpurl.URL
 	Client *http.Client
 }
 
@@ -25,7 +25,7 @@ func New(url string) (*Client, error) {
 		return nil, err
 	}
 	return &Client{
-		url:    *u,
+		URL:    *u,
 		Client: &http.Client{},
 	}, nil
 }
@@ -184,7 +184,7 @@ type FindOpts struct {
 
 func (g *Client) Find(query string, opts *FindOpts) ([]FindResultItem, error) {
 	// Cloning to be able to modify.
-	url := g.url
+	url := g.URL
 	url.Path = path.Join(url.Path, "/metrics/find")
 
 	queryvalues := make(httpurl.Values)
@@ -251,7 +251,7 @@ func (g *Client) QueryMulti(q []string, interval TimeInterval) (MultiDatapoints,
 	}
 
 	// Cloning to be able to modify.
-	url := g.url
+	url := g.URL
 
 	url.Path = path.Join(url.Path, "/render")
 
@@ -283,7 +283,7 @@ func (g *Client) QueryMultiSince(q []string, ago time.Duration) (MultiDatapoints
 	}
 
 	// Cloning to be able to modify.
-	url := g.url
+	url := g.URL
 
 	url.Path = path.Join(url.Path, "/render")
 
@@ -314,7 +314,7 @@ func (g *Client) Query(q string, interval TimeInterval) Datapoints {
 	}
 
 	// Cloning to be able to modify.
-	url := g.url
+	url := g.URL
 
 	url.Path = path.Join(url.Path, "/render")
 
@@ -348,7 +348,7 @@ func (g *Client) QuerySince(q string, ago time.Duration) Datapoints {
 	}
 
 	// Cloning to be able to modify.
-	url := g.url
+	url := g.URL
 
 	url.Path = path.Join(url.Path, "/render")
 
